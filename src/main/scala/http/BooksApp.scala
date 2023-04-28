@@ -6,8 +6,7 @@ import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.actor.typed.scaladsl.Behaviors
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import conversions.BookJsonSupport
-import db.MongoConnection
-import db.MongoConnection.database
+import db.{Database, MongoConnection}
 import model.Book
 
 object BooksApp extends App with SprayJsonSupport with BookJsonSupport {
@@ -17,9 +16,9 @@ object BooksApp extends App with SprayJsonSupport with BookJsonSupport {
 
   import akka.http.scaladsl.server.Directives._
 
-  database.createCollection("books").toFuture().foreach {
-    _ => println("Database initialized")
-  }
+  val collection = MongoConnection.init
+  val db = Database(collection)
+
   val route = {
     path("api" / "all") {
       parameters("page".as[Int], "limit".as[Int]) { (page, limit) =>
@@ -31,6 +30,16 @@ object BooksApp extends App with SprayJsonSupport with BookJsonSupport {
         )
       }
     } ~
+      path("api" / "book") {
+        post {
+          entity(as[Book]) { book =>
+            validate(book.title.nonEmpty && book.author.nonEmpty, "Title or author must not be empty.") {
+              db.insert(book)
+              complete(s"Book was added.")
+            }
+          }
+        }
+      } ~
       path("api" / "book" / Segment) { (id: String) =>
         get {
           complete(
@@ -45,18 +54,7 @@ object BooksApp extends App with SprayJsonSupport with BookJsonSupport {
               complete(s"Get old book with id: $id and update it to new $book")
             }
           } ~
-          delete(complete(s"Book with id: $id was deleted")) ~
-          post {
-            entity(as[Book]) { book =>
-              validate(book.title.nonEmpty && book.author.nonEmpty, "Title or author must not be empty.") {
-                val res: Seq[String] = MongoConnection.insert(book.title, book.author).map(x => s"Ordered $x")
-                println("hhhh")
-                println(res)
-                // complete(s"Ordered $book")
-                complete(res)
-              }
-            }
-          }
+          delete(complete(s"Book with id: $id was deleted"))
       }
   }
 
