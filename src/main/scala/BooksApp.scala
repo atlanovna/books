@@ -1,9 +1,6 @@
-package http
-
 import akka.actor.typed.ActorSystem
-import akka.http.scaladsl.Http
-import akka.http.scaladsl.model.{ContentTypes, HttpEntity}
 import akka.actor.typed.scaladsl.Behaviors
+import akka.http.scaladsl.Http
 import akka.http.scaladsl.marshallers.sprayjson.SprayJsonSupport
 import conversions.BookJsonSupport
 import db.{Database, MongoConnection}
@@ -22,12 +19,7 @@ object BooksApp extends App with SprayJsonSupport with BookJsonSupport {
   val route = {
     path("api" / "all") {
       parameters("page".as[Int], "limit".as[Int]) { (page, limit) =>
-        complete(
-          HttpEntity(
-            ContentTypes.`application/json`,
-            s"books page: $page, limit: $limit"
-          )
-        )
+        complete(db.findAll(page, limit))
       }
     } ~
       path("api" / "book") {
@@ -42,19 +34,14 @@ object BooksApp extends App with SprayJsonSupport with BookJsonSupport {
       } ~
       path("api" / "book" / Segment) { (id: String) =>
         get {
-          complete(
-            HttpEntity(
-              ContentTypes.`application/json`,
-              s"book with id: $id"
-            )
-          )
+          complete(db.findOne(id))
         } ~
           put {
             entity(as[Book]) { book =>
-              complete(s"Get old book with id: $id and update it to new $book")
+              complete(db.update(id, book))
             }
           } ~
-          delete(complete(s"Book with id: $id was deleted"))
+          delete(complete(db.delete(id)))
       }
   }
 
